@@ -1,0 +1,43 @@
+[package]
+name = "rara-skills"
+description = "Skill discovery, management, and prompt-injection library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+async-trait.workspace = true
+base64.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+flate2 = "1"
+notify-debouncer-full = "0.7"
+percent-encoding = "2"
+rara-paths.workspace = true
+regex = "1"
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_yaml = "0.9"
+sha2.workspace = true
+snafu.workspace = true
+sqlx.workspace = true
+strum = { workspace = true, features = ["derive"] }
+strum_macros.workspace = true
+tar = "0.4"
+tokio.workspace = true
+tracing.workspace = true
+zip = "8.2.0"
+
+[dev-dependencies]
+rstest = "0.26"
+tempfile = { workspace = true }

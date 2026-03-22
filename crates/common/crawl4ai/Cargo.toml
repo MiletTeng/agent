@@ -1,0 +1,25 @@
+[package]
+name = "crawl4ai"
+version = "0.0.1"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Crawl4AI API client for fetching markdown from URLs"
+
+[dependencies]
+reqwest = { workspace = true, features = ["json"] }
+serde.workspace = true
+snafu.workspace = true
+tracing.workspace = true
+validator = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[lints]
+workspace = true

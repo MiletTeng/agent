@@ -1,0 +1,348 @@
+// Copyright 2025 Rararulab
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+//! SKILL.md parser -- frontmatter extraction and metadata deserialization.
+//!
+//! Splits a `SKILL.md` file at `---` delimiters into YAML frontmatter and
+//! Markdown body, deserializes the frontmatter into [`SkillMetadata`],
+//! validates skill names, and merges OpenClaw-style requirements when present.
+
+use std::{
+    io::{BufRead, BufReader},
+    path::Path,
+};
+
+use serde::Deserialize;
+use snafu::ResultExt;
+
+use crate::{
+    error::{FrontmatterSnafu, InvalidInputSnafu, IoSnafu, MissingFrontmatterSnafu, Result},
+    types::{InstallKind, InstallSpec, SkillContent, SkillMetadata},
+};
+
+/// Validate a skill name: lowercase ASCII, hyphens, 1-64 chars.
+pub fn validate_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == ':')
+        && !name.starts_with('-')
+        && !name.ends_with('-')
+        && !name.starts_with(':')
+        && !name.ends_with(':')
+        && !name.contains("--")
+        && !name.contains("::")
+}
+
+/// Parse a SKILL.md file into metadata only (frontmatter).
+pub fn parse_metadata(content: &str, skill_dir: &Path) -> Result<SkillMetadata> {
+    let path_str = skill_dir.display().to_string();
+    let (frontmatter, _body) = split_frontmatter(content, &path_str)?;
+    let mut meta: SkillMetadata =
+        serde_yaml::from_str(&frontmatter).context(FrontmatterSnafu { path: &path_str })?;
+
+    if !validate_name(&meta.name) {
+        return InvalidInputSnafu {
+            message: format!(
+                "invalid skill name '{}': must be 1-64 lowercase alphanumeric/hyphen chars",
+                meta.name
+            ),
+        }
+        .fail();
+    }
+
+    merge_openclaw_requires(&frontmatter, &mut meta);
+    meta.path = skill_dir.to_path_buf();
+    Ok(meta)
+}
+
+/// Parse a SKILL.md file into full content (metadata + body).
+pub fn parse_skill(content: &str, skill_dir: &Path) -> Result<SkillContent> {
+    let path_str = skill_dir.display().to_string();
+    let (frontmatter, body) = split_frontmatter(content, &path_str)?;
+    let mut meta: SkillMetadata =
+        serde_yaml::from_str(&frontmatter).context(FrontmatterSnafu { path: &path_str })?;
+
+    if !validate_name(&meta.name) {
+        return InvalidInputSnafu {
+            message: format!(
+                "invalid skill name '{}': must be 1-64 lowercase alphanumeric/hyphen chars",
+                meta.name
+            ),
+        }
+        .fail();
+    }
+
+    merge_openclaw_requires(&frontmatter, &mut meta);
+    meta.path = skill_dir.to_path_buf();
+    Ok(SkillContent {
+        metadata: meta,
+        body:     body.to_string(),
+    })
+}
+
+/// Read only the YAML frontmatter from a SKILL.md file, stopping at the
+/// closing `---` delimiter.  Avoids reading the (potentially large) Markdown
+/// body into memory.
+pub fn read_frontmatter(path: &Path) -> Result<String> {
+    let file = std::fs::File::open(path).context(IoSnafu)?;
+    let reader = BufReader::new(file);
+
+    let mut lines = reader.lines();
+    // Expect the first non-empty line to be "---".
+    let first = loop {
+        match lines.next() {
+            Some(Ok(line)) if line.trim().is_empty() => continue,
+            Some(Ok(line)) => break line,
+            Some(Err(e)) => return Err(e).context(IoSnafu),
+            None => {
+                return MissingFrontmatterSnafu {
+                    path: path.display().to_string(),
+                }
+                .fail();
+            }
+        }
+    };
+    if first.trim() != "---" {
+        return MissingFrontmatterSnafu {
+            path: path.display().to_string(),
+        }
+        .fail();
+    }
+
+    // Collect lines until the closing "---".
+    let mut frontmatter = String::new();
+    for line in lines {
+        let line = line.context(IoSnafu)?;
+        if line.trim() == "---" {
+            return Ok(frontmatter);
+        }
+        frontmatter.push_str(&line);
+        frontmatter.push('\n');
+    }
+
+    MissingFrontmatterSnafu {
+        path: path.display().to_string(),
+    }
+    .fail()
+}
+
+/// Parse metadata directly from a SKILL.md file, reading only the frontmatter.
+pub fn parse_metadata_from_file(skill_md: &Path, skill_dir: &Path) -> Result<SkillMetadata> {
+    let frontmatter = read_frontmatter(skill_md)?;
+    let path_str = skill_dir.display().to_string();
+    let mut meta: SkillMetadata =
+        serde_yaml::from_str(&frontmatter).context(FrontmatterSnafu { path: &path_str })?;
+
+    if !validate_name(&meta.name) {
+        return InvalidInputSnafu {
+            message: format!(
+                "invalid skill name '{}': must be 1-64 lowercase alphanumeric/hyphen chars",
+                meta.name
+            ),
+        }
+        .fail();
+    }
+
+    merge_openclaw_requires(&frontmatter, &mut meta);
+    meta.path = skill_dir.to_path_buf();
+    Ok(meta)
+}
+
+// ── OpenClaw metadata extraction ────────────────────────────────────────────
+
+/// Helper struct to extract `metadata.openclaw.requires` and
+/// `metadata.openclaw.install`.
+#[derive(Deserialize, Default)]
+struct OpenClawRoot {
+    #[serde(default)]
+    metadata: Option<OpenClawMetadataWrap>,
+}
+
+#[derive(Deserialize, Default)]
+struct OpenClawMetadataWrap {
+    /// Our own namespace.
+    #[serde(default)]
+    openclaw: Option<OpenClawMeta>,
+    /// Original openclaw/clawdbot namespace.
+    #[serde(default)]
+    clawdbot: Option<OpenClawMeta>,
+    /// Moltbot namespace (some openclaw skills use this).
+    #[serde(default)]
+    moltbot:  Option<OpenClawMeta>,
+}
+
+#[derive(Deserialize, Default)]
+struct OpenClawMeta {
+    #[serde(default)]
+    requires: Option<OpenClawRequires>,
+    #[serde(default)]
+    install:  Vec<OpenClawInstallSpec>,
+}
+
+#[derive(Deserialize, Default)]
+struct OpenClawRequires {
+    #[serde(default)]
+    bins:     Vec<String>,
+    #[serde(default, rename = "anyBins")]
+    any_bins: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct OpenClawInstallSpec {
+    #[serde(default)]
+    kind:        String,
+    #[serde(default)]
+    formula:     Option<String>,
+    #[serde(default)]
+    package:     Option<String>,
+    /// openclaw uses `pkg` for go/cargo installs.
+    #[serde(default)]
+    pkg:         Option<String>,
+    #[serde(default, rename = "module")]
+    module_path: Option<String>,
+    #[serde(default)]
+    url:         Option<String>,
+    #[serde(default)]
+    bins:        Vec<String>,
+    #[serde(default)]
+    os:          Vec<String>,
+    #[serde(default)]
+    label:       Option<String>,
+}
+
+/// If the top-level `requires` is empty but
+/// `metadata.openclaw.requires`/`install` exist, merge them into
+/// `SkillMetadata.requires`.
+fn merge_openclaw_requires(frontmatter: &str, meta: &mut SkillMetadata) {
+    // Only merge if top-level requires is empty
+    if !meta.requires.bins.is_empty()
+        || !meta.requires.any_bins.is_empty()
+        || !meta.requires.install.is_empty()
+    {
+        return;
+    }
+
+    let root: OpenClawRoot = match serde_yaml::from_str(frontmatter) {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+
+    let oc = match root
+        .metadata
+        .and_then(|m| m.openclaw.or(m.clawdbot).or(m.moltbot))
+    {
+        Some(oc) => oc,
+        None => return,
+    };
+
+    if let Some(req) = oc.requires {
+        meta.requires.bins = req.bins;
+        meta.requires.any_bins = req.any_bins;
+    }
+
+    fn parse_kind(s: &str) -> Option<InstallKind> {
+        match s {
+            "brew" => Some(InstallKind::Brew),
+            "npm" => Some(InstallKind::Npm),
+            "go" => Some(InstallKind::Go),
+            "cargo" => Some(InstallKind::Cargo),
+            "uv" => Some(InstallKind::Uv),
+            "download" => Some(InstallKind::Download),
+            _ => None,
+        }
+    }
+
+    for spec in oc.install {
+        if let Some(kind) = parse_kind(&spec.kind) {
+            meta.requires.install.push(InstallSpec {
+                kind:    kind.clone(),
+                formula: spec.formula,
+                package: spec.package.or_else(|| {
+                    if kind == InstallKind::Npm || kind == InstallKind::Cargo {
+                        spec.pkg.clone()
+                    } else {
+                        None
+                    }
+                }),
+                module:  spec.module_path.or_else(|| {
+                    if kind == InstallKind::Go {
+                        spec.pkg.clone()
+                    } else {
+                        None
+                    }
+                }),
+                url:     spec.url,
+                bins:    spec.bins,
+                os:      spec.os,
+                label:   spec.label,
+            });
+        }
+    }
+}
+
+// ── _meta.json support (openclaw) ───────────────────────────────────────────
+
+/// Metadata from an openclaw `_meta.json` file (sibling to SKILL.md).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SkillMetaJson {
+    #[serde(default)]
+    pub owner:        Option<String>,
+    #[serde(default)]
+    pub slug:         Option<String>,
+    #[serde(default, rename = "displayName")]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub latest:       Option<SkillMetaVersion>,
+}
+
+/// Version info from `_meta.json`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SkillMetaVersion {
+    #[serde(default)]
+    pub version: Option<String>,
+}
+
+/// Try to read and parse `_meta.json` from a skill directory.
+/// Returns `None` if the file doesn't exist or can't be parsed.
+pub fn read_meta_json(skill_dir: &Path) -> Option<SkillMetaJson> {
+    let path = skill_dir.join("_meta.json");
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+/// Split SKILL.md content at `---` delimiters into (frontmatter, body).
+fn split_frontmatter(content: &str, path: &str) -> Result<(String, String)> {
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return MissingFrontmatterSnafu {
+            path: path.to_owned(),
+        }
+        .fail();
+    }
+
+    // Skip the opening ---
+    let after_open = &trimmed[3..];
+    let close_pos = after_open.find("\n---").ok_or_else(|| {
+        MissingFrontmatterSnafu {
+            path: path.to_owned(),
+        }
+        .build()
+    })?;
+
+    let frontmatter = after_open[..close_pos].trim().to_string();
+    let body = after_open[close_pos + 4..].trim().to_string();
+    Ok((frontmatter, body))
+}

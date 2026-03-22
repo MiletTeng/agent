@@ -1,0 +1,33 @@
+# Build artifacts
+target/
+.cargo/
+web/node_modules/
+web/dist/
+
+# Git
+.git/
+.gitignore
+
+# Worktrees
+.worktrees/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# CI / Docs
+.github/
+docs/
+!docs/book/
+*.md
+!CHANGELOG.md
+
+# Docker (avoid recursive context)
+docker-compose*.yml
+
+# Miscellaneous
+.env
+.env.*
+env.local*

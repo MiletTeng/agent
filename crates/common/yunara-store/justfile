@@ -1,0 +1,27 @@
+# Yunara Store Migration Tasks
+#
+# This crate uses `sqlx::migrate!` at runtime. These tasks are optional
+# helpers if you have `sqlx-cli` installed.
+
+# Database URL (PostgreSQL)
+DATABASE_URL := env('DATABASE_URL', 'postgres://postgres:postgres@localhost:5432/rara')
+MIGRATION_DIRECTORY := env('MIGRATION_DIRECTORY', '../../rara-model/migrations')
+
+[group("📒 Help")]
+[private]
+default:
+    @just --list
+
+# Create a new migration
+migrate-create name:
+    DATABASE_URL={{DATABASE_URL}} sqlx migrate add -r --source {{MIGRATION_DIRECTORY}} {{name}}
+
+alias mc := migrate-create
+
+# Run all pending migrations
+migrate:
+    DATABASE_URL={{DATABASE_URL}} sqlx migrate run --source {{MIGRATION_DIRECTORY}}
+
+# Revert the most recent migration
+migrate-revert:
+    DATABASE_URL={{DATABASE_URL}} sqlx migrate revert --source {{MIGRATION_DIRECTORY}}

@@ -1,0 +1,24 @@
+---
+extends: default
+
+ignore: |
+    *.template.yaml
+    generated/
+    .github/
+    target/
+    deploy/helm/
+
+rules:
+  line-length:
+    max: 240
+    level: warning
+  truthy:
+    allowed-values: ['true', 'false']
+  comments:
+    min-spaces-from-content: 1
+  document-start: disable
+  indentation:
+    spaces: 2
+    indent-sequences: whatever
+  brackets:
+    max-spaces-inside: 1
