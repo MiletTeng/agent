@@ -1,0 +1,56 @@
+name: Release-plz
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+
+  # Release unpublished packages (only when release PR is merged).
+  release-plz-release:
+    name: Release-plz release
+    runs-on: arc-runner-set
+    if: ${{ github.repository_owner == 'rararulab' && github.event_name == 'pull_request' && github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release') }}
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          fetch-depth: false
+          persist-credentials: false
+
+      - name: Clean ignored files
+        run: |
+          rm -rf bin/
+          git clean -fdX
+      - name: Run release-plz
+        uses: release-plz/action@52440b50d383aa252927de395c8b2c1e0a9cf8e9 # v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get workspace version
+        id: get-version
+        run: |
+          VERSION=$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "rara-cli") | .version')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "rara-cli version: $VERSION"
+
+  # Trigger release workflow
+  trigger-release:
+    name: Trigger release workflow
+    needs: release-plz-release
+    if: ${{ needs.release-plz-release.result == 'success' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: v${{ needs.release-plz-release.outputs.version }}
+    secrets:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

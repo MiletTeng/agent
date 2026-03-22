@@ -1,0 +1,61 @@
+/*
+ * Copyright 2025 Rararulab
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package job.telegrambot.v1;
+
+option go_package = "github.com/rararulab/rara/pb/telegrambot/v1;telegrambotpb";
+option java_outer_classname = "TelegramBotCommandProto";
+option java_package = "com.job.api.telegrambot.v1";
+
+// Request to send a plain text Telegram message to a chat.
+message SendMessageRequest {
+  // Telegram chat ID that should receive the message.
+  int64 chat_id = 1;
+  // Message text to send.
+  string text = 2;
+}
+
+// Response for a SendMessage request.
+message SendMessageResponse {
+  // Whether the request was accepted for processing.
+  bool accepted = 1;
+}
+
+// Request to dispatch a higher-level bot command.
+message DispatchCommandRequest {
+  // Command name (for example, "sync_settings").
+  string command = 1;
+  // JSON-encoded command payload.
+  string payload_json = 2;
+}
+
+// Response for a DispatchCommand request.
+message DispatchCommandResponse {
+  // Whether the command was accepted for processing.
+  bool accepted = 1;
+  // Optional status/detail message.
+  string message = 2;
+}
+
+// Service for external command/control operations on the Telegram bot.
+service TelegramBotCommandService {
+  // Sends a plain text message to a specific Telegram chat.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  // Dispatches a bot command with an optional JSON payload.
+  rpc DispatchCommand(DispatchCommandRequest) returns (DispatchCommandResponse);
+}

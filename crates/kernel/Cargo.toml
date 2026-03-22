@@ -1,0 +1,80 @@
+[package]
+name = "rara-kernel"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Unified agent orchestrator: lifecycle, memory, LLM execution, tool dispatch"
+
+[features]
+default = []
+testing = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+backon.workspace = true
+base.workspace = true
+base64.workspace = true
+bon.workspace = true
+chromiumoxide.workspace = true
+chrono.workspace = true
+cron = "0.15"
+crossbeam-queue.workspace = true
+dashmap = "6"
+derive_more = { workspace = true }
+eventsource-stream.workspace = true
+futures.workspace = true
+image.workspace = true
+indexmap.workspace = true
+jiff.workspace = true
+md5.workspace = true
+opendal = { workspace = true }
+opentelemetry = { version = "0.31.0", default-features = false, features = ["trace", "metrics"] }
+rand.workspace = true
+rapidfuzz.workspace = true
+rara-domain-shared.workspace = true
+rara-paths.workspace = true
+rara-soul.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+rustix = { workspace = true, features = ["fs"] }
+rara-tool-macro.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+smart-default.workspace = true
+snafu.workspace = true
+sqlx.workspace = true
+strum = { workspace = true, features = ["derive"] }
+tokio.workspace = true
+tokio-util = { workspace = true }
+tracing.workspace = true
+tracing-opentelemetry = "0.32.0"
+ulid.workspace = true
+unicode-normalization.workspace = true
+urlencoding.workspace = true
+usearch = "2"
+uuid.workspace = true
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[dev-dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+common-telemetry.workspace = true
+dashmap = "6"
+rara-domain-shared = { workspace = true, features = ["testing"] }
+rara-kernel = { path = ".", features = ["testing"] }
+serde_json.workspace = true
+tempfile.workspace = true
+test-case = "^3"
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[lints]
+workspace = true

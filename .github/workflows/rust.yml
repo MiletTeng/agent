@@ -1,0 +1,105 @@
+name: Rust
+
+on:
+  workflow_call:
+
+concurrency:
+  group: rust-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+  RUST_BACKTRACE: true
+  CARGO_INCREMENTAL: false
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  RUSTC_WRAPPER: sccache
+  SCCACHE_BUCKET: sccache
+  SCCACHE_REGION: us-east-1
+  SCCACHE_ENDPOINT: http://10.0.0.167:9000
+  SCCACHE_S3_USE_SSL: "false"
+  AWS_ACCESS_KEY_ID: minioadmin
+  AWS_SECRET_ACCESS_KEY: minioadmin
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  clippy:
+    name: Clippy
+    runs-on: arc-runner-set
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          persist-credentials: false
+
+      - name: Start sccache
+        run: sccache --start-server || true
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats
+
+  docs:
+    name: Documentation
+    runs-on: arc-runner-set
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          persist-credentials: false
+
+      - name: Start sccache
+        run: sccache --start-server || true
+
+      - name: Generate documentation
+        run: cargo +nightly doc --workspace --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  test:
+    name: Test
+    runs-on: arc-runner-set
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        with:
+          persist-credentials: false
+
+      - name: Start sccache
+        run: sccache --start-server || true
+
+      - name: Run tests
+        run: cargo nextest run --workspace
+
+  rust-success:
+    name: Rust Success
+    runs-on: arc-runner-set
+    needs: [clippy, docs, test]
+    if: always()
+    steps:
+      - name: Check all Rust jobs status
+        env:
+          CLIPPY_RESULT: ${{ needs.clippy.result }}
+          DOCS_RESULT: ${{ needs.docs.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          if [[ "$CLIPPY_RESULT" != "success" || \
+                "$DOCS_RESULT" != "success" || \
+                "$TEST_RESULT" != "success" ]]; then
+            echo "One or more Rust jobs failed"
+            echo "  clippy: $CLIPPY_RESULT"
+            echo "  docs:   $DOCS_RESULT"
+            echo "  test:   $TEST_RESULT"
+            exit 1
+          fi
+          echo "All Rust jobs passed successfully"

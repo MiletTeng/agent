@@ -1,0 +1,26 @@
+[package]
+name = "base"
+version = "0.0.1"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Base utilities and common types for job"
+
+[dependencies]
+derive_more = { workspace = true }
+dotenvy = "0.15.7"
+rustix = { workspace = true, features = ["process"] }
+schemars.workspace = true
+serde.workspace = true
+snafu.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,31 @@
+[package]
+name = "rara-domain-shared"
+version = "0.0.1"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Shared domain interfaces, traits, and types for cross-crate contracts"
+
+[features]
+default = []
+testing = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+derive_more.workspace = true
+jiff.workspace = true
+serde.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+utoipa.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[lints]
+workspace = true
